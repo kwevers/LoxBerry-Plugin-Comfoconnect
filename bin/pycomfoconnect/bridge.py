@@ -1,6 +1,7 @@
 import logging
 import select
 import socket
+import time
 
 from .message import *
 
@@ -13,7 +14,7 @@ class Bridge(object):
     PORT = 56747
 
     @staticmethod
-    def discover(host=None, timeout=5):
+    def discover(host=None, timeout=5, retries=5, delay=5, backoff=2):
         """Broadcast the network and look for local bridges."""
 
         # Setup socket
@@ -25,7 +26,17 @@ class Bridge(object):
         if host is None:
             udpsocket.sendto(b"\x0a\x00", ('<broadcast>', Bridge.PORT))
         else:
-            udpsocket.sendto(b"\x0a\x00", (host, Bridge.PORT))
+            while retries > 0:
+                try:
+                    udpsocket.sendto(b"\x0a\x00", (host, Bridge.PORT))
+                    break
+                except OSError as e:
+                    if e.errno == 101:
+                        print(f"Socket connection failed: {e}")
+                        time.sleep(delay)
+                        retries -= 1
+                        delay *= backoff
+                raise Exception("Socket connection failed after retries")
 
         # Try to read response
         parser = DiscoveryOperation()
